@@ -45,7 +45,7 @@ def test_forward_Attention():
     print(output.shape) #torch.Size([3, 64])
 
 
-class MultilHeadAttention(nn.Module):
+class MultiheadAttention(nn.Module):
     def __init__(self, word_size: int = 512, embed_dim: int = 64, n_head:int=8) -> None:
         super().__init__()
         self.n_head = n_head
@@ -66,8 +66,8 @@ class MultilHeadAttention(nn.Module):
 
 def _test_forward_MultilHeadAttention(word_size=512, embed_dim=64, n_head=8,
                                       device=torch.device('cuda:0')):
-    
-    mha = MultilHeadAttention(word_size=word_size,
+
+    mha = MultiheadAttention(word_size=word_size,
                               embed_dim=embed_dim,
                               n_head=n_head).to(device=device)
 
