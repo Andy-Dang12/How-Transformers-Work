@@ -26,88 +26,36 @@ class Attention(nn.Module):
         return Z
 
 
-def test_forward_Attention():
-    attention = Attention(word_size=512, embed_dim=64)
-
-    # Tạo các embedding của 3 từ
-    word1 = torch.randn(1, 512)  # Embedding của từ thứ nhất
-    word2 = torch.randn(1, 512)  # Embedding của từ thứ hai
-    word3 = torch.randn(1, 512)  # Embedding của từ thứ ba
-
-    # Gộp các embedding thành một tensor đầu vào
-    input_tensor = torch.cat([word1, word2, word3], dim=0)
-
-    # Forward pass để tính toán đầu ra
-    output = attention(input_tensor)
-
-    # In ra kết quả đầu ra
-    print(output)
-    print(output.shape) #torch.Size([3, 64])
-
-
 class MultiheadAttention(nn.Module):
+    r"""
+    https://arxiv.org/abs/1706.03762
+    """
     def __init__(self, word_size: int = 512, embed_dim: int = 64, n_head:int=8) -> None:
         super().__init__()
         self.n_head = n_head
         self.embed_dim = embed_dim
         self.dim_K = torch.tensor(embed_dim)
-        self.W0 = nn.Parameter(torch.empty(embed_dim * n_head, embed_dim))
-        nn.init.xavier_normal_(self.W0)
+        self.proj = nn.Parameter(torch.empty(embed_dim * n_head, embed_dim))
+        nn.init.xavier_uniform_(self.proj)
         self.multihead = nn.ModuleList([
             Attention(word_size, embed_dim) for _ in range(n_head)
         ])
 
     def forward(self, x: Tensor) -> Tensor:
         Z_s = torch.cat([head(x) for head in self.multihead], dim=1)
-        Z = torch.matmul(Z_s, self.W0)
-        # assert Z_s.shape[1] == self.W0.shape[0]
-        # print('Z_s.shape = ',Z_s.shape , '*', self.W0.shape, ' = self.W0')
+        Z = torch.matmul(Z_s, self.proj)
         return Z
 
-def _test_forward_MultilHeadAttention(word_size=512, embed_dim=64, n_head=8,
-                                      device=torch.device('cuda:0')):
-
-    mha = MultiheadAttention(word_size=word_size,
-                              embed_dim=embed_dim,
-                              n_head=n_head).to(device=device)
-
-    # Tạo các embedding của 3 từ
-    word1 = torch.randn(1, word_size)  # Embedding của từ thứ nhất
-    word2 = torch.randn(1, word_size)  # Embedding của từ thứ hai
-    word3 = torch.randn(1, word_size)  # Embedding của từ thứ ba
-
-    # Gộp các embedding thành một tensor đầu vào
-    input_tensor = torch.cat([word1, word2, word3], dim=0).to(device=device)
-
-    # Forward pass để tính toán đầu ra
-    output = mha(input_tensor)
-
-    # In ra kết quả đầu ra
-    # print(output)
-    # print(output.shape) #torch.Size([3, 64])
-
-def test_forward_MultilHeadAttention():
-    from random import randint, choice, seed
-    from time import time
-    seed(0)
-    start = time()
-    for i in range(1000):
-
-        kwargs = {'word_size':choice([512, 768, 1024]),
-                'embed_dim':choice([64, 512, 1024]),
-                'n_head':randint(2, 12),
-                'device':torch.device('cpu')
-                }
-        _test_forward_MultilHeadAttention(**kwargs)
-    end = time()
-    print('runtime = ', end-start)
 
 class  MultiQueryAttention(Attention):
+    r"""
+    https://arxiv.org/pdf/1911.02150.pdf
+    """
     def __init__(self, word_size: int = 512, embed_dim: int = 64, n_query:int=8) -> None:
         super().__init__(word_size, embed_dim)
         self.n_query = n_query
-        self.W0 = nn.Parameter(torch.empty(embed_dim * n_query, embed_dim))
-        nn.init.xavier_normal_(self.W0)
+        self.proj = nn.Parameter(torch.empty(embed_dim * n_query, embed_dim))
+        nn.init.xavier_normal_(self.proj)
         delattr(self, 'query')
         self.querys = nn.ModuleList([
             nn.Linear(in_features=word_size, out_features=embed_dim, bias=True)
@@ -122,20 +70,30 @@ class  MultiQueryAttention(Attention):
         Z_s = torch.cat([
             self.self_attention(query(x), K, V) for query in self.querys
         ], dim=1)
-        Z = torch.matmul(Z_s, self.W0)
+        Z = torch.matmul(Z_s, self.proj)
         return Z
 
-def test_forward_MultiQueryAttention():
-    word_size =512
-    device = torch.device('cuda', 0)
-    mqa = MultiQueryAttention(word_size=word_size, embed_dim=64, n_query=8).to(device=device)
 
-    # Tạo các embedding của 3 từ
-    word1 = torch.randn(1, word_size)  # Embedding của từ thứ nhất
-    word2 = torch.randn(1, word_size)  # Embedding của từ thứ hai
-    word3 = torch.randn(1, word_size)  # Embedding của từ thứ ba
-        # Gộp các embedding thành một tensor đầu vào
-    input_tensor = torch.cat([word1, word2, word3], dim=0).to(device=device)
-    output = mqa(input_tensor)
-    print(output)
-    print(output.shape)
+class  GroupedQueryAttention(Attention):
+    r"""
+    https://arxiv.org/pdf/2305.13245.pdf
+    """
+    def __init__(self, word_size: int = 512, embed_dim: int = 64,
+                 n_grouped: int = 4, n_query_each_group:int=2) -> None:
+        super().__init__(word_size, embed_dim)
+        delattr(self, 'query')
+        delattr(self, 'key')
+        delattr(self, 'value')
+
+        self.grouped = nn.ModuleList([
+            MultiQueryAttention(word_size, embed_dim, n_query=n_query_each_group)
+            for _ in range(n_grouped)
+        ])
+        # self.proj = nn.Parameter(torch.empty((..., ...), requires_grad=True))
+        self.proj = nn.Parameter(torch.empty(embed_dim * n_grouped, embed_dim))
+        nn.init.xavier_uniform_(self.proj)
+
+    def forward(self, x: Tensor) -> Tensor:
+        Z_s = torch.cat([head(x) for head in self.grouped], dim=1)
+        Z = torch.matmul(Z_s, self.proj)
+        return Z
