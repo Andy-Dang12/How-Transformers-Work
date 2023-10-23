@@ -1,3 +1,17 @@
+r"""
+
+                      ∧＿∧
+                     ( -.-)
+─────────────────────∪────∪────────────────────────────
+all implementation of attention I putted into new repo:
+      https://github.com/knotgrass/attention.git
+━━━━━━━━━━━━━━━━━━━┯━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━
+                     |    |
+                     |    |
+                      U  U
+
+"""
+
 import torch
 from torch import nn, Tensor
 
